@@ -13,14 +13,17 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-
+pub use crate::syscall;
 use crate::config::MAX_APP_NUM;
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
-
+pub use syscall::TaskInfo;
+pub use syscall::TimeVal;
+use crate::timer::*;
 pub use context::TaskContext;
 
 /// The task manager, where all the tasks are managed.
@@ -34,9 +37,9 @@ pub use context::TaskContext;
 /// existing functions on `TaskManager`.
 pub struct TaskManager {
     /// total number of tasks
-    num_app: usize,
+    pub num_app: usize,
     /// use inner value to get mutable access
-    inner: UPSafeCell<TaskManagerInner>,
+    pub inner: UPSafeCell<TaskManagerInner>,
 }
 
 /// Inner of Task Manager
@@ -61,11 +64,19 @@ lazy_static! {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
         }
+        // 对 task_infos 进行初始化
+        let task_infos = [TaskInfo{
+            status: TaskStatus::UnInit,
+            syscall_times:[0; MAX_SYSCALL_NUM],
+            time: 0,
+        }; MAX_APP_NUM];
+
         TaskManager {
             num_app,
             inner: unsafe {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
+                    task_infos,
                     current_task: 0,
                 })
             },
